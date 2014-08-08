@@ -6,7 +6,7 @@ import (
 )
 
 func TestAddSelf(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   _, err := addNodeToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
   if err == nil {
     t.Errorf("able to add node without first initializing self node")
@@ -35,7 +35,7 @@ func TestAddSelf(t *testing.T) {
 }
 
 func TestGetSelf(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
 
   n2 := c.GetSelf()
@@ -49,7 +49,7 @@ func TestGetSelf(t *testing.T) {
 }
 
 func TestAddNode(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   _, err := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
   if err != nil {
     t.Errorf("cluster.AddNode failed: %v", err)
@@ -69,7 +69,7 @@ func TestAddNode(t *testing.T) {
 }
 
 func TestAddingDuplicateNodesFail(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, err := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
 
   if err != nil {
@@ -107,7 +107,7 @@ func TestAddingDuplicateNodesFail(t *testing.T) {
 }
 
 func TestAddIdenticalNodeSucceedsSilently(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, err := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
 
   if err != nil {
@@ -128,10 +128,10 @@ func TestAddIdenticalNodeSucceedsSilently(t *testing.T) {
 }
 
 func TestRecieveGossipNoChange(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
 
-  gossip := GossipNode{n1.Nid, 5, NodeStateActive}
+  gossip := GossipNode{n1.Nid, 5, NodeStateActive, 1}
   err := c.ReceiveGossip(&gossip)
   if err != nil {
     t.Errorf("Receiving gossip for node in cluster produced error: %v", err)
@@ -145,17 +145,23 @@ func TestRecieveGossipNoChange(t *testing.T) {
 }
 
 func TestRecieveGossipChangeStateAndQuiet(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
 
   c.gossip[n1.Nid].Quiet = 10
 
-  gossip := GossipNode{n1.Nid, 9, NodeStateInactive}
+  gossip := GossipNode{n1.Nid, 9, NodeStateInactive, 1}
   err := c.ReceiveGossip(&gossip)
   if err != nil {
     t.Errorf("Receiving gossip for node in cluster produced error: %v", err)
   }
-  if c.gossip[n1.Nid].Quiet != 9 {
+  if c.gossip[n1.Nid].State != NodeStateActive {
+    t.Error("state changed even though state counter wasn't higher")
+  }
+
+  gossip = GossipNode{n1.Nid, 8, NodeStateInactive, 2}
+  err = c.ReceiveGossip(&gossip)
+  if c.gossip[n1.Nid].Quiet != 8 {
     t.Error("Quiet for node in cluster not lowered by gossip")
   }
   if c.gossip[n1.Nid].State != NodeStateInactive {
@@ -164,10 +170,10 @@ func TestRecieveGossipChangeStateAndQuiet(t *testing.T) {
 }
 
 func TestReceiveGossipFailsOnUnknownNode(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
 
-  gossip := GossipNode{12345, 1, NodeStateActive}
+  gossip := GossipNode{12345, 1, NodeStateActive, 1}
   err := c.ReceiveGossip(&gossip)
   if err == nil || !strings.HasPrefix(err.Error(), "ReceiveGossip: node not found") {
     t.Error("Gossip for unknown node didn't produce expected error")
@@ -175,7 +181,7 @@ func TestReceiveGossipFailsOnUnknownNode(t *testing.T) {
 }
 
 func TestIncrementQuietCycles(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
   n2, _ := addNodeToCluster(c, "bar", "127.0.0.1:1338", NodeStateActive)
   n3, _ := addNodeToCluster(c, "baz", "127.0.0.1:1339", NodeStateInactive)
@@ -195,6 +201,9 @@ func TestIncrementQuietCycles(t *testing.T) {
   if c.nodes[n2.Nid].State != NodeStateFailed || c.gossip[n2.Nid].State != NodeStateFailed {
     t.Error("node #2 should have been marked as failed but wasn't")
   }
+  if c.nodes[n2.Nid].StateCtr != 2 {
+    t.Error("node #2 should have state counter incremented on state change but wasn't")
+  }
   if c.nodes[n3.Nid].State != NodeStateInactive || c.gossip[n3.Nid].State != NodeStateInactive {
     t.Error("node #3 was inactive but was marked as failed")
   }
@@ -207,7 +216,7 @@ func TestIncrementQuietCycles(t *testing.T) {
 }
 
 func TestGetActiveNode(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
   n2, _ := addNodeToCluster(c, "bar", "127.0.0.1:1338", NodeStateInactive)
   n3, _ := addNodeToCluster(c, "baz", "127.0.0.1:1339", NodeStateFailed)
@@ -238,7 +247,7 @@ func TestGetActiveNode(t *testing.T) {
 }
 
 func TestGetNode(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
   n2, _ := addNodeToCluster(c, "bar", "127.0.0.1:1338", NodeStateInactive)
   n3, _ := addNodeToCluster(c, "baz", "127.0.0.1:1339", NodeStateFailed)
@@ -269,7 +278,7 @@ func TestGetNode(t *testing.T) {
 }
 
 func TestGetAllNids(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
   n2, _ := addNodeToCluster(c, "bar", "127.0.0.1:1338", NodeStateInactive)
   n3, _ := addNodeToCluster(c, "baz", "127.0.0.1:1339", NodeStateFailed)
@@ -286,7 +295,7 @@ func TestGetAllNids(t *testing.T) {
 }
 
 func TestGetGossip(t *testing.T) {
-  c := initCluster()
+  c, _ := initCluster()
   addSelfToCluster(c, "foo", "127.0.0.1:1337", NodeStateActive)
   addNodeToCluster(c, "bar", "127.0.0.1:1338", NodeStateInactive)
   addNodeToCluster(c, "baz", "127.0.0.1:1339", NodeStateFailed)
@@ -304,6 +313,7 @@ func addSelfToCluster(c *cluster, name string, addr string, state NodeState) (n 
     c.GenerateNid(),
     addr,
     state,
+    1,
   }
   err = c.AddSelf(n)
   return n, err
@@ -316,6 +326,7 @@ func addNodeToCluster(c *cluster, name string, addr string, state NodeState) (n 
     c.GenerateNid(),
     addr,
     state,
+    1,
   }
   err = c.AddNode(n)
   return n, err

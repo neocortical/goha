@@ -14,6 +14,7 @@ const (
 	NodeStateInactive NodeState = 0
 	NodeStateActive   NodeState = 1
 	NodeStateFailed   NodeState = 2
+  NodeStateDead     NodeState = 3
 )
 
 type Node struct {
@@ -21,6 +22,7 @@ type Node struct {
 	Nid   Nid
 	Addr  string
 	State NodeState
+  StateCtr uint32
 }
 
 // Contains compact data regarding one node's knowledge of another node in the cluster
@@ -28,6 +30,7 @@ type GossipNode struct {
   Nid   Nid
   Quiet quietCycles // number of gossip cycles since one node as heard from another
   State NodeState   // the known state of the node
+  StateCtr uint32
 }
 
 func (n Node) String() string {

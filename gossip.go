@@ -195,7 +195,7 @@ func (svc *GossipService) broadcastNodeJoinEvent(newNode *Node) {
 }
 
 // Start the gossip server. Method is unexposed so that RPC doesn't complain
-func (svc *GossipService) startGossip(cbChan *chan<- Callback, joinAddr string) error {
+func (svc *GossipService) startGossip(joinAddr string) error {
 	svc.log.logInfo("Starting gossip service...")
 
   self := *svc.cluster.GetSelf()
@@ -246,8 +246,7 @@ func (svc *GossipService) startGossip(cbChan *chan<- Callback, joinAddr string) 
     }
 
 		svc.log.logInfo(fmt.Sprintf("Joined cluster via broker %s. We are node: %d", joinAddr, self.Nid))
-    cb := Callback{CBJoinedCluster, self}
-    *cbChan <- cb
+    svc.cluster.DoJoinedClusterCallback()
 	}
 
   // start gossip loop

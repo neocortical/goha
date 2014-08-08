@@ -12,19 +12,23 @@ const (
 
 type cluster struct {
   self   *Node
+  cbChan chan<- Callback
 	nodes  map[Nid]*Node
 	gossip map[Nid]*GossipNode
 	lock   sync.RWMutex
 }
 
 // Create a new cluster object from scratch
-func initCluster() *cluster {
-  return &cluster{
+func initCluster() (_ *cluster, cbChan <-chan Callback) {
+  cb := make(chan Callback)
+  c := &cluster{
     nil,
+    chan<- Callback(cb),
     make(map[Nid]*Node),
     make(map[Nid]*GossipNode),
     sync.RWMutex{},
   }
+  return c, (<-chan Callback)(cb)
 }
 
 func (c *cluster) AddSelf(self Node) error {
@@ -33,7 +37,7 @@ func (c *cluster) AddSelf(self Node) error {
     c.lock.Unlock()
     return fmt.Errorf("AddSelf: self already initialized")
   }
-  c.self = &Node{self.Name, self.Nid, self.Addr, self.State}
+  c.self = &self
   c.lock.Unlock()
 
   if err := c.AddNode(self); err != nil {
@@ -50,12 +54,16 @@ func (c *cluster) GetSelf() (self *Node) {
   c.lock.RLock()
   defer c.lock.RUnlock()
 
-  self = &Node{c.self.Name, c.self.Nid, c.self.Addr, c.self.State}
+  self = &Node{c.self.Name, c.self.Nid, c.self.Addr, c.self.State, c.self.StateCtr}
   return self
 }
 
 // Synchronously add a new node to the cluster, failing if Nid or Name is a duplicate
 func (c *cluster) AddNode(newNode Node) error {
+  return c.addNodeInternal(&newNode)
+}
+
+func (c *cluster) addNodeInternal(newNode *Node) error {
   c.lock.Lock()
   defer c.lock.Unlock()
 
@@ -65,7 +73,7 @@ func (c *cluster) AddNode(newNode Node) error {
 
   for nid, node := range c.nodes {
     // ignore calls to add identical node, and do not modify state in cluster
-    if (&node).EqualsExcludingState(&newNode) {
+    if (&node).EqualsExcludingState(newNode) {
       return nil
     }
 
@@ -78,8 +86,10 @@ func (c *cluster) AddNode(newNode Node) error {
       return fmt.Errorf("AddNode: duplicate internal address: %s", node.Addr)
     }
   }
-  c.nodes[newNode.Nid] = &newNode
-  c.gossip[newNode.Nid] = &GossipNode{newNode.Nid, 0, newNode.State}
+  c.nodes[newNode.Nid] = newNode
+  c.gossip[newNode.Nid] = &GossipNode{newNode.Nid, 0, newNode.State, newNode.StateCtr}
+
+  c.doCallback(CBNodeJoined, *newNode)
 
   return nil
 }
@@ -95,8 +105,22 @@ func (c *cluster) ReceiveGossip(newGossip *GossipNode) error {
   }
 
   // update cluster to reflect state changes and/or quiet cycle max
-  if gossip.State != newGossip.State {
+  if gossip.State != newGossip.State && gossip.StateCtr < newGossip.StateCtr {
     gossip.State = newGossip.State
+    gossip.StateCtr = newGossip.StateCtr
+    c.nodes[gossip.Nid].State = newGossip.State
+    c.nodes[gossip.Nid].StateCtr = newGossip.StateCtr
+
+    switch gossip.State {
+    case NodeStateActive:
+      c.doCallback(CBNodeActive, *c.nodes[gossip.Nid])
+    case NodeStateFailed:
+      c.doCallback(CBNodeFailed, *c.nodes[gossip.Nid])
+    case NodeStateInactive:
+      c.doCallback(CBNodeInactive, *c.nodes[gossip.Nid])
+    case NodeStateDead:
+      c.doCallback(CBNodeDead, *c.nodes[gossip.Nid])
+    }
   }
   if gossip.Quiet > newGossip.Quiet {
     gossip.Quiet = newGossip.Quiet
@@ -119,7 +143,9 @@ func (c *cluster) IncrementQuietCycles() {
     gossip.Quiet++
     if gossip.Quiet >= gossipQuietThreshold && gossip.State == NodeStateActive {
       gossip.State = NodeStateFailed
+      gossip.StateCtr++
       c.nodes[nid].State = NodeStateFailed
+      c.nodes[nid].StateCtr++
     }
   }
 }
@@ -154,7 +180,7 @@ func (c *cluster) GetNode(nid Nid) (node *Node, err error) {
     return nil, fmt.Errorf("GetActiveNode: node not found: %d", nid)
   }
 
-  node = &Node{clusterNode.Name, clusterNode.Nid, clusterNode.Addr, clusterNode.State}
+  node = &Node{clusterNode.Name, clusterNode.Nid, clusterNode.Addr, clusterNode.State, clusterNode.StateCtr}
   return node, nil
 }
 
@@ -181,7 +207,7 @@ func (c *cluster) GetRandomActiveNode() (node *Node) {
 
   index := rand.Intn(len(activeNids))
   chosen := c.nodes[activeNids[index]]
-  node = &Node{chosen.Name, chosen.Nid, chosen.Addr, chosen.State}
+  node = &Node{chosen.Name, chosen.Nid, chosen.Addr, chosen.State, chosen.StateCtr}
   return node
 }
 
@@ -209,4 +235,16 @@ func (c *cluster) GetGossip() (gossip []GossipNode) {
   }
 
   return gossip
+}
+
+func (c *cluster) DoJoinedClusterCallback() {
+  self := c.GetSelf()
+  c.doCallback(CBJoinedCluster, *self)
+}
+
+func (c *cluster) doCallback(t CallbackType, n Node) {
+  cb := Callback{t, n}
+  go func() {
+    c.cbChan <- cb
+  }()
 }

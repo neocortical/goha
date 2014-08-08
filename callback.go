@@ -11,6 +11,8 @@ const (
 	CBJoinedCluster CallbackType = "JoinedCluster"
   CBNodeJoined    CallbackType = "NodeJoined"
   CBNodeActive    CallbackType = "NodeActive"
+  CBNodeInactive  CallbackType = "NodeInactive"
+  CBNodeFailed    CallbackType = "NodeFailed"
   CBNodeDead      CallbackType = "NodeDead"
 )
 
