@@ -7,7 +7,7 @@ import (
 )
 
 const (
-  gossipQuietThreshold quietCycles = 250
+  gossipQuietThreshold quietCycles = 10 
 )
 
 type cluster struct {
