@@ -7,13 +7,11 @@ import (
 type CallbackType string
 
 const (
-  CBInitError     CallbackType = "InitializationError"
-	CBJoinedCluster CallbackType = "JoinedCluster"
-  CBNodeJoined    CallbackType = "NodeJoined"
-  CBNodeActive    CallbackType = "NodeActive"
-  CBNodeInactive  CallbackType = "NodeInactive"
-  CBNodeFailed    CallbackType = "NodeFailed"
-  CBNodeDead      CallbackType = "NodeDead"
+  CBInitError       CallbackType = "InitializationError"
+	CBJoinedCluster   CallbackType = "JoinedCluster"
+  CBNodeJoined      CallbackType = "NodeJoined"
+  CBSelfStateChange CallbackType = "SelfStateChange"
+  CBNodeStateChange CallbackType = "NodeStateChange"
 )
 
 type Callback struct {

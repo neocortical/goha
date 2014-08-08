@@ -111,15 +111,10 @@ func (c *cluster) ReceiveGossip(newGossip *GossipNode) error {
     c.nodes[gossip.Nid].State = newGossip.State
     c.nodes[gossip.Nid].StateCtr = newGossip.StateCtr
 
-    switch gossip.State {
-    case NodeStateActive:
-      c.doCallback(CBNodeActive, *c.nodes[gossip.Nid])
-    case NodeStateFailed:
-      c.doCallback(CBNodeFailed, *c.nodes[gossip.Nid])
-    case NodeStateInactive:
-      c.doCallback(CBNodeInactive, *c.nodes[gossip.Nid])
-    case NodeStateDead:
-      c.doCallback(CBNodeDead, *c.nodes[gossip.Nid])
+    if c.self.Nid == gossip.Nid {
+      c.doCallback(CBSelfStateChange, *c.self)
+    } else {
+      c.doCallback(CBNodeStateChange, *c.nodes[gossip.Nid])
     }
   }
   if gossip.Quiet > newGossip.Quiet {
@@ -146,6 +141,11 @@ func (c *cluster) IncrementQuietCycles() {
       gossip.StateCtr++
       c.nodes[nid].State = NodeStateFailed
       c.nodes[nid].StateCtr++
+      if c.self.Nid == nid {
+        c.doCallback(CBSelfStateChange, *c.self)
+      } else {
+        c.doCallback(CBNodeStateChange, *c.nodes[nid])
+      }
     }
   }
 }
