@@ -22,8 +22,8 @@ type Log struct {
 	logLevel LogLevel
 }
 
-func loggingInit(logdir string, logLevel LogLevel, nid string) (_ *Log, err error) {
-	logfname := fmt.Sprintf("%s/%s.log", logdir, nid)
+func loggingInit(logdir string, logLevel LogLevel, nodeName string) (_ *Log, err error) {
+	logfname := fmt.Sprintf("%s/%s.log", logdir, nodeName)
 	logfile, err := os.Create(logfname)
 	if err != nil {
 		return nil, err
