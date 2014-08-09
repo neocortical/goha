@@ -20,6 +20,7 @@ func Start(config Config) (_ <-chan Callback, err error) {
     config.Name,
     cluster.GenerateNid(),
     config.InternalAddr,
+    config.ExternalAddr,
     NodeStateActive,
     1,
   }
@@ -29,11 +30,9 @@ func Start(config Config) (_ <-chan Callback, err error) {
     return cbChan, err
   }
 
-  go doService(cluster, log, config.JoinAddr)
+  doService(cluster, log, config.JoinAddr)
 
   log.logInfo("Cluster started")
-
-  // TODO: spawn external API service
 
   return cbChan, nil
 }
@@ -44,4 +43,7 @@ func doService(cluster *cluster, log *Log, joinAddr string) {
 
   gossipService := &GossipService{cluster, log}
   go gossipService.startGossip(joinAddr)
+
+  restService := &RestService{cluster, log}
+  go restService.startRestService()
 }

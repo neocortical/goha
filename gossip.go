@@ -146,16 +146,17 @@ func (svc *GossipService) discoverNodes(senderNid Nid, nids []Nid) {
   }
 
   // dial RPC
-  remoteGossipSvc, err := rpc.Dial("tcp", sender.Addr)
+  remoteGossipSvc, err := rpc.Dial("tcp", sender.GossipAddr)
   if err != nil {
-    svc.log.logError(fmt.Sprintf("Error trying to gossip to \"%s\": %v", sender.Addr, err))
+    svc.log.logError(fmt.Sprintf("Error trying to gossip to \"%s\": %v", sender.GossipAddr, err))
     return
   }
+  defer remoteGossipSvc.Close()
 
   nodes := make([]Node, 0, len(nids))
   err = remoteGossipSvc.Call("GossipService.GetNodes", &nids, &nodes)
   if err != nil {
-    svc.log.logError(fmt.Sprintf("Error discoving nodes from \"%s\": %v", sender.Addr, err))
+    svc.log.logError(fmt.Sprintf("Error discoving nodes from \"%s\": %v", sender.GossipAddr, err))
     return
   }
 
@@ -178,15 +179,16 @@ func (svc *GossipService) broadcastNodeJoinEvent(newNode *Node) {
   for _, nid := range clusterNids {
     if node, err := svc.cluster.GetActiveNode(nid); err == nil {
       // dial RPC
-      remoteGossipSvc, err := rpc.Dial("tcp", node.Addr)
+      remoteGossipSvc, err := rpc.Dial("tcp", node.GossipAddr)
       if err != nil {
-        svc.log.logError(fmt.Sprintf("Error trying to broadcast node join to \"%s\": %v", node.Addr, err))
+        svc.log.logError(fmt.Sprintf("Error trying to broadcast node join to \"%s\": %v", node.GossipAddr, err))
       }
 
       response := ""
       err = remoteGossipSvc.Call("GossipService.AddNode", newNode, &response)
+      remoteGossipSvc.Close()
       if err != nil {
-        svc.log.logError(fmt.Sprintf("Error broadcasting add node to \"%s\": %v", node.Addr, err))
+        svc.log.logError(fmt.Sprintf("Error broadcasting add node to \"%s\": %v", node.GossipAddr, err))
       }
     } else {
       svc.log.logTrace(fmt.Sprintf("Ingoring broadcast to node %d: %v", nid, err))
@@ -203,12 +205,12 @@ func (svc *GossipService) startGossip(joinAddr string) error {
   // start listening for RPC communication
   rpcServer := rpc.NewServer()
 	rpcServer.Register(svc)
-	listener, err := net.Listen("tcp", self.Addr)
+	listener, err := net.Listen("tcp", self.GossipAddr)
 	if err != nil {
 		svc.log.logFatal(fmt.Sprintf("RPC listen error: %v", err))
 		return err
 	} else {
-    svc.log.logInfo(fmt.Sprintf("Listening on %s", self.Addr))
+    svc.log.logInfo(fmt.Sprintf("Listening on %s", self.GossipAddr))
 		go func() {
       for {
         cxn, err := listener.Accept()
@@ -216,7 +218,7 @@ func (svc *GossipService) startGossip(joinAddr string) error {
   				svc.log.logError(fmt.Sprintf("RPC error: %v", err))
   				continue
   			}
-  			svc.log.logTrace(fmt.Sprintf("Server %s accepted RPC connection from %s", self.Addr, cxn.RemoteAddr()))
+  			svc.log.logTrace(fmt.Sprintf("Server %s accepted RPC connection from %s", self.GossipAddr, cxn.RemoteAddr()))
   			go rpcServer.ServeConn(cxn)
       }
     }()
@@ -225,14 +227,15 @@ func (svc *GossipService) startGossip(joinAddr string) error {
 	// If we were given a broker address, try to join a cluster or die
 	if joinAddr != "" {
 		svc.log.logInfo(fmt.Sprintf("Joining cluster via broker: %s", joinAddr))
-		client, err := rpc.Dial("tcp", joinAddr)
+		remoteGossipSvc, err := rpc.Dial("tcp", joinAddr)
 		if err != nil {
 			svc.log.logFatal(fmt.Sprintf("Error trying to dial cluster join broker: %v", err))
 			return err
 		}
 
     joinResponse := NodesResponse{make([]Node, 0, 1)}
-		err = client.Call("GossipService.JoinCluster", &self, &joinResponse)
+		err = remoteGossipSvc.Call("GossipService.JoinCluster", &self, &joinResponse)
+    remoteGossipSvc.Close()
 		if err != nil {
 			svc.log.logFatal(fmt.Sprintf("Unable to join cluster: %v", err))
 			return err
@@ -263,20 +266,21 @@ func (svc *GossipService) startGossip(joinAddr string) error {
     if randomNode != nil {
 
       // choose a random neighbor to gossip with
-      svc.log.logTrace(fmt.Sprintf("Gossiping to %s", randomNode.Addr))
+      svc.log.logTrace(fmt.Sprintf("Gossiping to %s", randomNode.GossipAddr))
 
       // dial up that neighbor and gossip
-      client, err := rpc.Dial("tcp", randomNode.Addr)
+      remoteGossipSvc, err := rpc.Dial("tcp", randomNode.GossipAddr)
       if err != nil {
-        svc.log.logError(fmt.Sprintf("Error trying to gossip to \"%s\": %v", randomNode.Addr, err))
+        svc.log.logError(fmt.Sprintf("Error trying to gossip to \"%s\": %v", randomNode.GossipAddr, err))
         continue
       }
 
       msg := GossipMessage{self.Nid, svc.cluster.GetGossip()}
       response := ""
-      err = client.Call("GossipService.Gossip", &msg, &response)
+      err = remoteGossipSvc.Call("GossipService.Gossip", &msg, &response)
+      remoteGossipSvc.Close()
       if err != nil {
-        svc.log.logError(fmt.Sprintf("Error getting gossip response from \"%s\": %v", randomNode.Addr, err))
+        svc.log.logError(fmt.Sprintf("Error getting gossip response from \"%s\": %v", randomNode.GossipAddr, err))
       }
     } else {
       svc.log.logTrace("Not gossipping because we are the only node in the cluster")

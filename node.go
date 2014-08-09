@@ -20,7 +20,8 @@ const (
 type Node struct {
 	Name  string
 	Nid   Nid
-	Addr  string
+	GossipAddr  string
+  RestAddr string
 	State NodeState
   StateCtr uint32
 }
@@ -39,15 +40,15 @@ func (n Node) String() string {
 }
 
 func (n *Node) validate() error {
-	if len(n.Name) == 0 {
+	if n.Name == "" {
 		return errors.New(fmt.Sprintf("nid must not be empty: %s", n.Nid))
 	}
-	if n.Addr == "" {
-		return errors.New("internal addr must not be nil")
-	}
-	if &(n.State) == nil {
-		return errors.New("node state must not be nil")
-	}
+	if n.GossipAddr == "" {
+    return errors.New("internal addr must not be nil")
+  }
+  if n.RestAddr == "" {
+    return errors.New("external addr must not be nil")
+  }
 	return nil
 }
 
@@ -55,5 +56,6 @@ func (n *Node) EqualsExcludingState(n2 *Node) bool {
   return n2 != nil &&
     n.Nid == n2.Nid &&
     n.Name == n2.Name &&
-    n.Addr == n2.Addr
+    n.GossipAddr == n2.GossipAddr &&
+    n.RestAddr == n2.RestAddr
 }

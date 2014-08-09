@@ -7,7 +7,7 @@ import (
 )
 
 const (
-  gossipQuietThreshold quietCycles = 10 
+  gossipQuietThreshold quietCycles = 10
 )
 
 type cluster struct {
@@ -40,7 +40,7 @@ func (c *cluster) AddSelf(self Node) error {
   c.self = &self
   c.lock.Unlock()
 
-  if err := c.AddNode(self); err != nil {
+  if err := c.addNodeInternal(&self); err != nil {
     c.lock.Lock()
     c.self = nil
     c.lock.Unlock()
@@ -54,7 +54,7 @@ func (c *cluster) GetSelf() (self *Node) {
   c.lock.RLock()
   defer c.lock.RUnlock()
 
-  self = &Node{c.self.Name, c.self.Nid, c.self.Addr, c.self.State, c.self.StateCtr}
+  self = &Node{c.self.Name, c.self.Nid, c.self.GossipAddr, c.self.RestAddr, c.self.State, c.self.StateCtr}
   return self
 }
 
@@ -82,8 +82,10 @@ func (c *cluster) addNodeInternal(newNode *Node) error {
       return fmt.Errorf("AddNode: duplicate NID: %d", nid)
     } else if newNode.Name == node.Name {
       return fmt.Errorf("AddNode: duplicate node name: %s", node.Name)
-    } else if newNode.Addr == node.Addr {
-      return fmt.Errorf("AddNode: duplicate internal address: %s", node.Addr)
+    } else if newNode.GossipAddr == node.GossipAddr {
+      return fmt.Errorf("AddNode: duplicate internal address: %s", node.GossipAddr)
+    } else if newNode.RestAddr == node.RestAddr {
+      return fmt.Errorf("AddNode: duplicate external address: %s", node.RestAddr)
     }
   }
   c.nodes[newNode.Nid] = newNode
@@ -180,7 +182,7 @@ func (c *cluster) GetNode(nid Nid) (node *Node, err error) {
     return nil, fmt.Errorf("GetActiveNode: node not found: %d", nid)
   }
 
-  node = &Node{clusterNode.Name, clusterNode.Nid, clusterNode.Addr, clusterNode.State, clusterNode.StateCtr}
+  node = &Node{clusterNode.Name, clusterNode.Nid, clusterNode.GossipAddr, clusterNode.RestAddr, clusterNode.State, clusterNode.StateCtr}
   return node, nil
 }
 
@@ -207,7 +209,7 @@ func (c *cluster) GetRandomActiveNode() (node *Node) {
 
   index := rand.Intn(len(activeNids))
   chosen := c.nodes[activeNids[index]]
-  node = &Node{chosen.Name, chosen.Nid, chosen.Addr, chosen.State, chosen.StateCtr}
+  node = &Node{chosen.Name, chosen.Nid, chosen.GossipAddr, chosen.RestAddr, chosen.State, chosen.StateCtr}
   return node
 }
 
