@@ -247,6 +247,19 @@ func (c *cluster) GetAllNids() (result []Nid) {
   return result
 }
 
+// get all nodes in all states
+func (c *cluster) GetAllNodes() *[]Node {
+  c.lock.RLock()
+  defer c.lock.RUnlock()
+
+  result := make([]Node, 0, len(c.nodes))
+  for _, n := range c.nodes {
+    result = append(result, Node{n.Name, n.Nid, n.GossipAddr, n.RestAddr, n.State, n.StateCtr})
+  }
+
+  return &result
+}
+
 // Gets the latest gossip. Caller must not modify the gossip.
 func (c *cluster) GetGossip() (gossip []GossipNode) {
   c.lock.RLock()
