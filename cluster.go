@@ -96,11 +96,27 @@ func (c *cluster) addNodeInternal(newNode *Node) error {
   return nil
 }
 
-// Update the cluster's gossip about a node
-func (c *cluster) ReceiveGossip(newGossip *GossipNode) error {
+func (c *cluster) HandleGossip(sender Nid, gossip []GossipNode) (unknownNodes *[]Nid, err error) {
   c.lock.Lock()
   defer c.lock.Unlock()
 
+  if c.nodes[sender] == nil {
+    return nil, fmt.Errorf("HandleGossip: sender is not in cluster")
+  }
+
+  unknownSlice := make([]Nid, 0, len(gossip))
+  for _, g := range gossip {
+    if err := c.handleGossipInternal(&g); err != nil {
+      unknownSlice = append(unknownSlice, g.Nid)
+    }
+  }
+  unknownNodes = &unknownSlice
+
+  return unknownNodes, nil
+}
+
+// Update the cluster's gossip about a node.
+func (c *cluster) handleGossipInternal(newGossip *GossipNode) error {
   gossip := c.gossip[newGossip.Nid]
   if gossip == nil {
     return fmt.Errorf("ReceiveGossip: node not found: %d", newGossip.Nid)
@@ -137,7 +153,12 @@ func (c *cluster) IncrementQuietCycles() {
     if gossip.State != NodeStateActive {
       continue;
     }
-    gossip.Quiet++
+
+    // don't increment our own quiet value. will implicitly remain 0
+    if gossip.Nid != c.self.Nid {
+      gossip.Quiet++
+    }
+
     if gossip.Quiet >= gossipQuietThreshold && gossip.State == NodeStateActive {
       gossip.State = NodeStateFailed
       gossip.StateCtr++

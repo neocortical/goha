@@ -131,8 +131,10 @@ func TestRecieveGossipNoChange(t *testing.T) {
   c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", "127.0.0.1:1437", NodeStateActive)
 
-  gossip := GossipNode{n1.Nid, 5, NodeStateActive, 1}
-  err := c.ReceiveGossip(&gossip)
+  gossip := []GossipNode{
+    GossipNode{n1.Nid, 5, NodeStateActive, 1},
+  }
+  _, err := c.HandleGossip(n1.Nid, gossip)
   if err != nil {
     t.Errorf("Receiving gossip for node in cluster produced error: %v", err)
   }
@@ -150,8 +152,10 @@ func TestRecieveGossipChangeStateAndQuiet(t *testing.T) {
 
   c.gossip[n1.Nid].Quiet = 10
 
-  gossip := GossipNode{n1.Nid, 9, NodeStateInactive, 1}
-  err := c.ReceiveGossip(&gossip)
+  gossip := []GossipNode{
+    GossipNode{n1.Nid, 9, NodeStateInactive, 1},
+  }
+  _, err := c.HandleGossip(n1.Nid, gossip)
   if err != nil {
     t.Errorf("Receiving gossip for node in cluster produced error: %v", err)
   }
@@ -159,8 +163,10 @@ func TestRecieveGossipChangeStateAndQuiet(t *testing.T) {
     t.Error("state changed even though state counter wasn't higher")
   }
 
-  gossip = GossipNode{n1.Nid, 8, NodeStateInactive, 2}
-  err = c.ReceiveGossip(&gossip)
+  gossip = []GossipNode{
+    GossipNode{n1.Nid, 8, NodeStateInactive, 2},
+  }
+  _, err = c.HandleGossip(n1.Nid, gossip)
   if c.gossip[n1.Nid].Quiet != 8 {
     t.Error("Quiet for node in cluster not lowered by gossip")
   }
@@ -174,7 +180,7 @@ func TestReceiveGossipFailsOnUnknownNode(t *testing.T) {
   addSelfToCluster(c, "foo", "127.0.0.1:1337", "127.0.0.1:1437", NodeStateActive)
 
   gossip := GossipNode{12345, 1, NodeStateActive, 1}
-  err := c.ReceiveGossip(&gossip)
+  err := c.handleGossipInternal(&gossip)
   if err == nil || !strings.HasPrefix(err.Error(), "ReceiveGossip: node not found") {
     t.Error("Gossip for unknown node didn't produce expected error")
   }
@@ -195,8 +201,8 @@ func TestIncrementQuietCycles(t *testing.T) {
   if c.nodes[n1.Nid].State != NodeStateActive || c.gossip[n1.Nid].State != NodeStateActive {
     t.Error("node #1 mistakenly marked as failed")
   }
-  if c.gossip[n1.Nid].Quiet != 1 {
-    t.Errorf("Node #1's quiet value not incremented correctly: %d", c.gossip[n1.Nid].Quiet)
+  if c.gossip[n1.Nid].Quiet != 0 {
+    t.Errorf("Node #1's quiet value incremented but it's the self node: %d", c.gossip[n1.Nid].Quiet)
   }
   if c.nodes[n2.Nid].State != NodeStateFailed || c.gossip[n2.Nid].State != NodeStateFailed {
     t.Error("node #2 should have been marked as failed but wasn't")
@@ -215,17 +221,17 @@ func TestIncrementQuietCycles(t *testing.T) {
   }
 }
 
-func TestSelfStateChange(t *testing.T) {
+func TestSelfWontFailDueToQuiet(t *testing.T) {
   c, _ := initCluster()
   n1, _ := addSelfToCluster(c, "foo", "127.0.0.1:1337", "127.0.0.1:1437", NodeStateActive)
 
   c.gossip[n1.Nid].Quiet = gossipQuietThreshold - 1
   c.IncrementQuietCycles()
-  if c.nodes[n1.Nid].State != NodeStateFailed || c.gossip[n1.Nid].State != NodeStateFailed {
-    t.Error("node #1 not failed when quiet threshold exceeded")
+  if c.nodes[n1.Nid].State != NodeStateActive || c.gossip[n1.Nid].State != NodeStateActive {
+    t.Error("self node failed when quiet threshold exceeded")
   }
-  if c.self.State != NodeStateFailed {
-    t.Error("Self node not failed appropriately")
+  if c.self.State != NodeStateActive {
+    t.Error("Self node failed due to quiet")
   }
 
 }

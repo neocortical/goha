@@ -34,22 +34,17 @@ func (svc *GossipService) Gossip(msg *GossipMessage, response *string) error {
 	svc.log.logTrace(fmt.Sprintf("Got gossip message: %v", msg))
 
   // loop over gossip, processing each node
-  unknownNodes := make([]Nid, 0, 10)
-  for _, gossip := range msg.Gossip {
-    if err := svc.cluster.ReceiveGossip(&gossip); err != nil {
-      unknownNodes = append(unknownNodes, gossip.Nid)
-    }
+  unknownNodes, err := svc.cluster.HandleGossip(msg.Sender, msg.Gossip)
+  if err != nil {
+    return err
   }
 
   // process any unknown nodes encountered
-  unknownCount := len(unknownNodes)
+  unknownCount := len(*unknownNodes)
   if unknownCount > 0 {
     svc.log.logDebug(fmt.Sprintf("Encountered %d unknown nodes during gossip", unknownCount))
-    go svc.discoverNodes(msg.Sender, unknownNodes)
+    go svc.discoverNodes(msg.Sender, *unknownNodes)
   }
-
-  // finally, increment quiet values and fail any nodes over threshold
-  svc.cluster.IncrementQuietCycles()
 
   *response = "ok"
 
@@ -261,6 +256,8 @@ func (svc *GossipService) startGossip(joinAddr string) error {
 		if tick.Sub(lastTick).Seconds() > 1.5 { // TODO: allow gossip period to be configured
 			svc.log.logWarn(fmt.Sprintf("Lost one or more ticks due to server load: %v", tick.Sub(lastTick)))
 		}
+
+    svc.cluster.IncrementQuietCycles()
 
     randomNode := svc.cluster.GetRandomActiveNode()
     if randomNode != nil {
