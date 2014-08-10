@@ -159,19 +159,27 @@ func TestRecieveGossipChangeStateAndQuiet(t *testing.T) {
   if err != nil {
     t.Errorf("Receiving gossip for node in cluster produced error: %v", err)
   }
-  if c.gossip[n1.Nid].State != NodeStateActive {
-    t.Error("state changed even though state counter wasn't higher")
+  if c.gossip[n1.Nid].State != NodeStateInactive {
+    t.Error("equal state counters should have caused state change to inactive")
   }
 
   gossip = []GossipNode{
-    GossipNode{n1.Nid, 8, NodeStateInactive, 2},
+    GossipNode{n1.Nid, 8, NodeStateActive, 2},
   }
   _, err = c.HandleGossip(n1.Nid, gossip)
   if c.gossip[n1.Nid].Quiet != 8 {
     t.Error("Quiet for node in cluster not lowered by gossip")
   }
-  if c.gossip[n1.Nid].State != NodeStateInactive {
+  if c.gossip[n1.Nid].State != NodeStateActive {
     t.Error("Node state not changed by gossip")
+  }
+
+  gossip = []GossipNode{
+    GossipNode{n1.Nid, 8, NodeStateInactive, 1},
+  }
+  _, err = c.HandleGossip(n1.Nid, gossip)
+  if c.gossip[n1.Nid].State != NodeStateActive {
+    t.Error("Node state changed by gossip even though state counter is lower")
   }
 }
 

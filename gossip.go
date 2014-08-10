@@ -259,7 +259,7 @@ func (svc *GossipService) startGossip(joinAddr string) error {
 
     svc.cluster.IncrementQuietCycles()
 
-    randomNode := svc.cluster.GetRandomActiveNode()
+    randomNode := svc.cluster.GetRandomActivePeer()
     if randomNode != nil {
 
       // choose a random neighbor to gossip with

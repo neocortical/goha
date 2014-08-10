@@ -21,12 +21,20 @@ type ClusterNode struct {
   Addr string
 }
 
+type StateChangeResponse struct {
+  Success bool
+}
+
 func (svc *RestService) startRestService() {
   self := svc.cluster.GetSelf()
   mux := http.NewServeMux()
   mux.HandleFunc("/nodes", func(w http.ResponseWriter, req *http.Request) {
     svc.handleNodes(w, req)
   })
+  mux.HandleFunc("/deactivate", func(w http.ResponseWriter, req *http.Request) {
+    svc.handleDeactivate(w, req)
+  })
+
   http.ListenAndServe(self.RestAddr, mux)
 }
 
@@ -49,6 +57,16 @@ func (svc *RestService) handleNodes(w http.ResponseWriter, req *http.Request) {
     }
   }
 
+  j, _ := json.Marshal(output)
+
+  w.Header().Set("Content-Type", "application/json")
+  w.Write(j)
+}
+
+func (svc *RestService) handleDeactivate(w http.ResponseWriter, req *http.Request) {
+  svc.cluster.DeactivateSelf()
+
+  output := StateChangeResponse{true}
   j, _ := json.Marshal(output)
 
   w.Header().Set("Content-Type", "application/json")

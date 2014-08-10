@@ -123,7 +123,7 @@ func (c *cluster) handleGossipInternal(newGossip *GossipNode) error {
   }
 
   // update cluster to reflect state changes and/or quiet cycle max
-  if gossip.State != newGossip.State && gossip.StateCtr < newGossip.StateCtr {
+  if shouldChangeState(gossip, newGossip) {
     gossip.State = newGossip.State
     gossip.StateCtr = newGossip.StateCtr
     c.nodes[gossip.Nid].State = newGossip.State
@@ -140,6 +140,25 @@ func (c *cluster) handleGossipInternal(newGossip *GossipNode) error {
   }
 
   return nil
+}
+
+// encapsulate the logic of state change based on receiving gossip from peers
+func shouldChangeState(gossip *GossipNode, newGossip *GossipNode) bool {
+  if gossip.State != newGossip.State {
+    if gossip.StateCtr < newGossip.StateCtr {
+      return true
+    } else if gossip.StateCtr == newGossip.StateCtr {
+      if gossip.State == NodeStateActive {
+        return true
+      } else if newGossip.State == NodeStateDead {
+        return true
+      }  else if gossip.State == NodeStateFailed && newGossip.State == NodeStateInactive {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 // After receiving gossip, increment quiet cycles for all nodes and fail any
@@ -159,11 +178,12 @@ func (c *cluster) IncrementQuietCycles() {
       gossip.Quiet++
     }
 
-    if gossip.Quiet >= gossipQuietThreshold && gossip.State == NodeStateActive {
+    // fail any nodes found to be over the quiet threshold
+    if gossip.Quiet >= gossipQuietThreshold {
       gossip.State = NodeStateFailed
       gossip.StateCtr++
       c.nodes[nid].State = NodeStateFailed
-      c.nodes[nid].StateCtr++
+      c.nodes[nid].StateCtr = gossip.StateCtr
       if c.self.Nid == nid {
         c.doCallback(CBSelfStateChange, *c.self)
       } else {
@@ -194,6 +214,7 @@ func (c *cluster) GetActiveNode(nid Nid) (node *Node, err error) {
   return node, nil
 }
 
+// get a node, regardless of state
 func (c *cluster) GetNode(nid Nid) (node *Node, err error) {
   c.lock.RLock()
   defer c.lock.RUnlock()
@@ -207,7 +228,9 @@ func (c *cluster) GetNode(nid Nid) (node *Node, err error) {
   return node, nil
 }
 
-func (c *cluster) GetRandomActiveNode() (node *Node) {
+// get a node randomly chosen from all active nodes. returns nil if no active nodes.
+// self node will never be returned.
+func (c *cluster) GetRandomActivePeer() (node *Node) {
   c.lock.RLock()
   defer c.lock.RUnlock()
 
@@ -276,6 +299,17 @@ func (c *cluster) GetGossip() (gossip []GossipNode) {
 func (c *cluster) DoJoinedClusterCallback() {
   self := c.GetSelf()
   c.doCallback(CBJoinedCluster, *self)
+}
+
+func (c *cluster) DeactivateSelf() {
+  c.lock.Lock()
+  defer c.lock.Unlock()
+
+  c.self.State = NodeStateInactive
+  c.self.StateCtr++
+  c.gossip[c.self.Nid].State = NodeStateInactive
+  c.gossip[c.self.Nid].StateCtr = c.self.StateCtr
+  c.doCallback(CBSelfStateChange, *c.self)
 }
 
 func (c *cluster) doCallback(t CallbackType, n Node) {
