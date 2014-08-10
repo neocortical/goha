@@ -54,6 +54,10 @@ func (c *cluster) GetSelf() (self *Node) {
   c.lock.RLock()
   defer c.lock.RUnlock()
 
+  if c.self == nil {
+    return nil
+  }
+
   self = &Node{c.self.Name, c.self.Nid, c.self.GossipAddr, c.self.RestAddr, c.self.State, c.self.StateCtr}
   return self
 }
@@ -301,15 +305,32 @@ func (c *cluster) DoJoinedClusterCallback() {
   c.doCallback(CBJoinedCluster, *self)
 }
 
-func (c *cluster) DeactivateSelf() {
+func (c *cluster) ChangeNodeState(nid Nid, newState NodeState) error {
   c.lock.Lock()
   defer c.lock.Unlock()
 
-  c.self.State = NodeStateInactive
-  c.self.StateCtr++
-  c.gossip[c.self.Nid].State = NodeStateInactive
-  c.gossip[c.self.Nid].StateCtr = c.self.StateCtr
-  c.doCallback(CBSelfStateChange, *c.self)
+  if newState == NodeStateFailed {
+    return fmt.Errorf("ChangeNodeState: cannot force state to failed")
+  }
+
+  node := c.nodes[nid]
+  if node == nil {
+    return fmt.Errorf("ChangeNodeState: node not found: %d", nid)
+  } else if node.State == newState {
+    return fmt.Errorf("ChangeNodeState: node already in state: %d", nid)
+  }
+
+  node.State = newState
+  node.StateCtr++
+  c.gossip[nid].State = newState
+  c.gossip[nid].StateCtr = node.StateCtr
+  if c.self.Nid == nid {
+    c.doCallback(CBSelfStateChange, *node)
+  } else {
+    c.doCallback(CBNodeStateChange, *node)
+  }
+
+  return nil
 }
 
 func (c *cluster) doCallback(t CallbackType, n Node) {

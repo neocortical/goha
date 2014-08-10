@@ -28,6 +28,13 @@ type NodesResponse struct {
   Nodes []Node
 }
 
+// Encapsulates a call to change a node's state
+type StateChangeMessage struct {
+  Sender Nid
+  Target Nid
+  State NodeState
+}
+
 // RPC-exposed method to receive gossip data from another node
 func (svc *GossipService) Gossip(msg *GossipMessage, response *string) error {
 
@@ -128,6 +135,16 @@ func (svc *GossipService) AddNode(node *Node, response *string) error {
   return nil
 }
 
+func (svc *GossipService) ChangeNodeState(msg StateChangeMessage, response *string) error {
+  err := svc.cluster.ChangeNodeState(msg.Target, msg.State)
+  if err != nil {
+    return err
+  } else {
+    *response = "ok"
+    return nil
+  }
+}
+
 // internal func to discover nodes that we received gossip for but don't have in our cluster
 func (svc *GossipService) discoverNodes(senderNid Nid, nids []Nid) {
   if len(nids) > maxNodeDiscoveryBatchSize {
@@ -196,16 +213,17 @@ func (svc *GossipService) startGossip(joinAddr string) error {
 	svc.log.logInfo("Starting gossip service...")
 
   self := *svc.cluster.GetSelf()
+  serviceAddr := self.GossipAddr
 
   // start listening for RPC communication
   rpcServer := rpc.NewServer()
 	rpcServer.Register(svc)
-	listener, err := net.Listen("tcp", self.GossipAddr)
+	listener, err := net.Listen("tcp", serviceAddr)
 	if err != nil {
 		svc.log.logFatal(fmt.Sprintf("RPC listen error: %v", err))
 		return err
 	} else {
-    svc.log.logInfo(fmt.Sprintf("Listening on %s", self.GossipAddr))
+    svc.log.logInfo(fmt.Sprintf("Listening on %s", serviceAddr))
 		go func() {
       for {
         cxn, err := listener.Accept()
@@ -213,7 +231,7 @@ func (svc *GossipService) startGossip(joinAddr string) error {
   				svc.log.logError(fmt.Sprintf("RPC error: %v", err))
   				continue
   			}
-  			svc.log.logTrace(fmt.Sprintf("Server %s accepted RPC connection from %s", self.GossipAddr, cxn.RemoteAddr()))
+  			svc.log.logTrace(fmt.Sprintf("Server %s accepted RPC connection from %s", serviceAddr, cxn.RemoteAddr()))
   			go rpcServer.ServeConn(cxn)
       }
     }()
@@ -256,6 +274,13 @@ func (svc *GossipService) startGossip(joinAddr string) error {
 		if tick.Sub(lastTick).Seconds() > 1.5 { // TODO: allow gossip period to be configured
 			svc.log.logWarn(fmt.Sprintf("Lost one or more ticks due to server load: %v", tick.Sub(lastTick)))
 		}
+
+    self := *svc.cluster.GetSelf()
+    if self.State != NodeStateActive {
+      svc.log.logTrace(fmt.Sprintf("Not gossiping because we not in active state: %s", self.State))
+      lastTick = tick
+      continue
+    }
 
     svc.cluster.IncrementQuietCycles()
 
