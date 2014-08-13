@@ -2,14 +2,14 @@ package goha
 
 import (
   "encoding/json"
-  "fmt"
+  l5g "github.com/neocortical/log5go"
   "net/http"
   "net/rpc"
 )
 
 type RestService struct {
   cluster *cluster
-  log *Log
+  log l5g.Log5Go
 }
 
 type Cluster struct {
@@ -74,7 +74,7 @@ func (svc *RestService) handleDeactivate(w http.ResponseWriter, req *http.Reques
     if err := svc.cluster.ChangeNodeState(self.Nid, NodeStateInactive); err != nil {
       output.Success = false
     } else {
-      svc.log.logInfo("Deactivated self. Broadcasting to cluster.")
+      svc.log.Info("Deactivated self. Broadcasting to cluster.")
       go svc.broadcastSelfDeactivation()
     }
   } else {
@@ -97,12 +97,12 @@ func (svc *RestService) broadcastSelfDeactivation() {
       continue
     }
 
-    svc.log.logTrace(fmt.Sprintf("Sending deactivate message to %s", node.GossipAddr))
+    svc.log.Trace("Sending deactivate message to %s", node.GossipAddr)
 
     // dial up that neighbor and gossip
     remoteGossipSvc, err := rpc.Dial("tcp", node.GossipAddr)
     if err != nil {
-      svc.log.logError(fmt.Sprintf("Error trying to send deactivate message to \"%s\": %v", node.GossipAddr, err))
+      svc.log.Error("Error trying to send deactivate message to \"%s\": %v", node.GossipAddr, err)
       continue
     }
 
@@ -111,9 +111,9 @@ func (svc *RestService) broadcastSelfDeactivation() {
     err = remoteGossipSvc.Call("GossipService.ChangeNodeState", msg, &response)
     remoteGossipSvc.Close()
     if err != nil {
-      svc.log.logError(fmt.Sprintf("Error getting state change response from \"%s\": %v", node.GossipAddr, err))
+      svc.log.Error("Error getting state change response from \"%s\": %v", node.GossipAddr, err)
     }
   }
 
-  svc.log.logInfo("Self deactivation broadcasted to cluster")
+  svc.log.Info("Self deactivation broadcasted to cluster")
 }

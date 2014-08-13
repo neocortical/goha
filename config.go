@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 )
 
 const (
@@ -24,7 +23,7 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	dir, _ := os.Getwd()
 
 	config := *new(Config)
 	config.Name = fmt.Sprintf("node_%d", os.Getpid())

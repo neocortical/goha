@@ -1,7 +1,7 @@
 package goha
 
 import (
-  "fmt"
+  l5g "github.com/neocortical/log5go"
   "strings"
 )
 
@@ -12,7 +12,7 @@ func Start(config Config) (_ <-chan Callback, err error) {
     return nil, err
   }
 
-  log.logInfo(fmt.Sprintf("Node startup from config: %s", config))
+  log.Info("Node startup from config: %s", config)
 
   cluster, cbChan := initCluster()
 
@@ -26,20 +26,21 @@ func Start(config Config) (_ <-chan Callback, err error) {
   }
   err = cluster.AddSelf(self)
   if err != nil {
-    log.logFatal(fmt.Sprintf("Error adding self to cluster: %v", err))
+    log.Fatal("Error adding self to cluster: %v", err)
     return cbChan, err
   }
 
-  doService(cluster, log, config.JoinAddr)
+  doService(cluster, config.JoinAddr)
 
-  log.logInfo("Cluster started")
+  log.Info("Cluster started")
 
   return cbChan, nil
 }
 
-func doService(cluster *cluster, log *Log, joinAddr string) {
+func doService(cluster *cluster, joinAddr string) {
 
-  log.logInfo(fmt.Sprintf("Cluster initialized. We are NID: %d", cluster.GetSelf().Nid))
+  log, _ := l5g.GetLog(cluster.GetSelf().Name)
+  log.Info("Cluster initialized. Starting service. We are NID: %d", cluster.GetSelf().Nid)
 
   gossipService := &GossipService{cluster, log}
   go gossipService.startGossip(joinAddr)

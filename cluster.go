@@ -2,6 +2,7 @@ package goha
 
 import (
   "fmt"
+  l5g "github.com/neocortical/log5go"
   "math/rand"
   "sync"
 )
@@ -15,6 +16,7 @@ type cluster struct {
   cbChan chan<- Callback
 	nodes  map[Nid]*Node
 	gossip map[Nid]*GossipNode
+  log    l5g.Log5Go
 	lock   sync.RWMutex
 }
 
@@ -26,6 +28,7 @@ func initCluster() (_ *cluster, cbChan <-chan Callback) {
     chan<- Callback(cb),
     make(map[Nid]*Node),
     make(map[Nid]*GossipNode),
+    nil,
     sync.RWMutex{},
   }
   return c, (<-chan Callback)(cb)
@@ -46,6 +49,10 @@ func (c *cluster) AddSelf(self Node) error {
     c.lock.Unlock()
     return err
   }
+
+  c.lock.Lock()
+  c.log, _ = l5g.GetLog(c.self.Name)
+  c.lock.Unlock()
 
   return nil
 }

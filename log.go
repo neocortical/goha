@@ -2,66 +2,25 @@ package goha
 
 import (
 	"fmt"
-	"log"
-	"os"
+	l5g "github.com/neocortical/log5go"
 )
 
-type LogLevel uint8
+type LogLevel uint16
 
 const (
-	LogLevelTrace LogLevel = 0
-	LogLevelDebug LogLevel = 1
-	LogLevelInfo  LogLevel = 2
-	LogLevelWarn  LogLevel = 3
-	LogLevelError LogLevel = 4
-	LogLevelFatal LogLevel = 5
+	LogLevelTrace LogLevel = LogLevel(l5g.LogTrace)
+	LogLevelDebug LogLevel = LogLevel(l5g.LogDebug)
+	LogLevelInfo  LogLevel = LogLevel(l5g.LogInfo)
+	LogLevelWarn  LogLevel = LogLevel(l5g.LogWarn)
+	LogLevelError LogLevel = LogLevel(l5g.LogError)
+	LogLevelFatal LogLevel = LogLevel(l5g.LogFatal)
 )
 
-type Log struct {
-	logger   *log.Logger
-	logLevel LogLevel
-}
-
-func loggingInit(logdir string, logLevel LogLevel, nodeName string) (_ *Log, err error) {
-	logfname := fmt.Sprintf("%s/%s.log", logdir, nodeName)
-	logfile, err := os.Create(logfname)
+func loggingInit(logdir string, logLevel LogLevel, nodeName string) (_ l5g.Log5Go, err error) {
+	logfname := fmt.Sprintf("%s.log", nodeName)
+	log, err := l5g.Log(l5g.LogLevel(logLevel)).ToFile(logdir, logfname).WithRotation(l5g.RollDaily, 7).Register(nodeName)
 	if err != nil {
 		return nil, err
 	}
-	logger := log.New(logfile, "", log.LstdFlags)
-	return &Log{logger, logLevel}, nil
-}
-
-func (l *Log) logTrace(msg string) {
-	if l.logLevel == LogLevelTrace {
-		l.logger.Println(fmt.Sprintf("TRACE: %s", msg))
-	}
-}
-
-func (l *Log) logDebug(msg string) {
-	if l.logLevel <= LogLevelDebug {
-		l.logger.Println(fmt.Sprintf("DEBUG: %s", msg))
-	}
-}
-
-func (l *Log) logInfo(msg string) {
-	if l.logLevel <= LogLevelInfo {
-		l.logger.Println(fmt.Sprintf("INFO: %s", msg))
-	}
-}
-
-func (l *Log) logWarn(msg string) {
-	if l.logLevel <= LogLevelWarn {
-		l.logger.Println(fmt.Sprintf("WARN: %s", msg))
-	}
-}
-
-func (l *Log) logError(msg string) {
-	if l.logLevel <= LogLevelError {
-		l.logger.Println(fmt.Sprintf("ERROR: %s", msg))
-	}
-}
-
-func (l *Log) logFatal(msg string) {
-	l.logger.Println(fmt.Sprintf("FATAL: %s", msg))
+	return log, nil
 }
